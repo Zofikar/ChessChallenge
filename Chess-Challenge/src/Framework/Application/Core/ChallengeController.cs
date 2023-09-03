@@ -19,8 +19,13 @@ namespace ChessChallenge.Application
         {
             Human,
             MyBot,
-            EvilBot
+            EvilBot,
+            NegamaxBasic,
+            NegamaxAdvanced
         }
+        public bool fastForward;
+        public int trueTotalMovesPlayed = 0;
+        public int movesPlayed = 0;
 
         // Game state
         readonly Random rng;
@@ -67,6 +72,7 @@ namespace ChessChallenge.Application
             boardUI = new BoardUI();
             board = new Board();
             pgns = new();
+            fastForward = false;
 
             BotStatsA = new BotMatchStats("IBot");
             BotStatsB = new BotMatchStats("IBot");
@@ -210,6 +216,8 @@ namespace ChessChallenge.Application
             {
                 PlayerType.MyBot => new ChessPlayer(new MyBot(), type, GameDurationMilliseconds),
                 PlayerType.EvilBot => new ChessPlayer(new EvilBot(), type, GameDurationMilliseconds),
+                PlayerType.NegamaxBasic => new ChessPlayer(new NegamaxBasic(), type, GameDurationMilliseconds),
+                PlayerType.NegamaxAdvanced => new ChessPlayer(new NegamaxAdvanced(), type, GameDurationMilliseconds),
                 _ => new ChessPlayer(new HumanPlayer(boardUI), type)
             };
         }
@@ -251,6 +259,7 @@ namespace ChessChallenge.Application
 
         void PlayMove(Move move)
         {
+            movesPlayed++;
             if (isPlaying)
             {
                 bool animate = PlayerToMove.IsBot;
@@ -273,6 +282,8 @@ namespace ChessChallenge.Application
 
         void EndGame(GameResult result, bool log = true, bool autoStartNextBotMatch = true)
         {
+            trueTotalMovesPlayed += movesPlayed;
+            movesPlayed = 0;
             if (isPlaying)
             {
                 isPlaying = false;
@@ -281,7 +292,7 @@ namespace ChessChallenge.Application
 
                 if (log)
                 {
-                    Log("Game Over: " + result, false, ConsoleColor.Blue);
+                    Log($"Game #{botMatchGameIndex + 1} Over: " + result, false, ConsoleColor.Blue);
                 }
 
                 string pgn = PGNCreator.CreatePGN(board, result, GetPlayerName(PlayerWhite), GetPlayerName(PlayerBlack));
@@ -292,21 +303,29 @@ namespace ChessChallenge.Application
                 {
                     UpdateBotMatchStats(result);
                     botMatchGameIndex++;
-                    int numGamesToPlay = botMatchStartFens.Length * 2;
+                    int numGamesToPlay = TotalGameCount;
 
                     if (botMatchGameIndex < numGamesToPlay && autoStartNextBotMatch)
                     {
                         botAPlaysWhite = !botAPlaysWhite;
-                        const int startNextGameDelayMs = 600;
-                        System.Timers.Timer autoNextTimer = new(startNextGameDelayMs);
-                        int originalGameID = gameID;
-                        autoNextTimer.Elapsed += (s, e) => AutoStartNextBotMatchGame(originalGameID, autoNextTimer);
-                        autoNextTimer.AutoReset = false;
-                        autoNextTimer.Start();
+                        if (fastForward)
+                        {
+                            StartNewGame(PlayerBlack.PlayerType, PlayerWhite.PlayerType);
+                        }
+                        else
+                        {
+                            const int startNextGameDelayMs = 600;
+                            System.Timers.Timer autoNextTimer = new(startNextGameDelayMs);
+                            int originalGameID = gameID;
+                            autoNextTimer.Elapsed += (s, e) => AutoStartNextBotMatchGame(originalGameID, autoNextTimer);
+                            autoNextTimer.AutoReset = false;
+                            autoNextTimer.Start();
+                        }
 
                     }
                     else if (autoStartNextBotMatch)
                     {
+                        fastForward = false;
                         Log("Match finished", false, ConsoleColor.Blue);
                     }
                 }
